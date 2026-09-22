@@ -4,8 +4,8 @@ import random
 from collections import defaultdict
 from typing import List, Tuple, Dict, Optional
 
-# Import trực tiếp các cấu trúc chuẩn từ file CS_self.py (đã dùng Dataclass)
-from CS_self_mới import TriangularFuzzy, Network, Arc, level_solver
+# Import trực tiếp các cấu trúc chuẩn từ file qpp_fuzzy_solver
+from qpp_fuzzy_solver import TriangularFuzzy, Network, Arc, level_solver
 
 def generate_random_network(n: int, density: float = 0.4) -> Network:
     """Tạo mạng ngẫu nhiên (hoặc DAG) với n đỉnh và mật độ cung khoảng density sử dụng class Network."""
