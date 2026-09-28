@@ -336,7 +336,6 @@ def prepare_city_network_from_cache(max_nodes=None):
     return network, G_active, id_to_node, new_source, new_sink, source_name, sink_name
 
 def get_node_name_label(G, node_id, id_to_node, default_prefix="Origin"):
-    """Trích xuất tên địa danh thực tế từ OpenStreetMap thay vì mã kỹ thuật."""
     actual_node = id_to_node.get(node_id, node_id)
     node_data = G.nodes.get(actual_node, {})
 
@@ -369,19 +368,11 @@ def plot_original_map(G_active, output_dir, max_nodes=None):
     suffix = f"_maxnodes_{max_nodes}" if max_nodes is not None else "_full"
 
     print("  -> Generating and exporting detailed original map...")
-    # Tăng kích thước khung hình lên (16x14) để có không gian rộng rãi hơn
     fig_raw, ax_raw = plt.subplots(figsize=(16, 14), facecolor='white')
-
     n_nodes = G_active.number_of_nodes()
-
-    # TĂNG MẠNH lực đẩy (k=10.0) và phóng to không gian (scale=6.0) để các node bung ra hoàn toàn
     opt_k = 10.0 / math.sqrt(n_nodes) if n_nodes > 0 else None
     pos_raw = nx.spring_layout(G_active, k=opt_k, scale=6.0, iterations=1000, weight=None, seed=42)
-
-    # Đường nét cực kỳ đậm và rõ ràng (width=2.2, màu tối #222222)
     nx.draw_networkx_edges(G_active, pos_raw, edge_color="#222222", width=2.2, alpha=0.9, ax=ax_raw)
-
-    # Node to rõ (node_size=140), màu nổi bật kết hợp viền trắng dày (linewidths=2.0) để tách bạch các điểm
     nx.draw_networkx_nodes(G_active, pos_raw, node_size=140, node_color="#1f77b4", edgecolors="white", linewidths=2.0,
                            ax=ax_raw)
 
@@ -402,8 +393,6 @@ def plot_original_map(G_active, output_dir, max_nodes=None):
     return pos_raw
 
 def _edge_key(u_node, v_node):
-    """Khoá cạnh KHÔNG hướng, dùng để nhóm các path cùng đi qua 1 đoạn đường
-    vật lý (bất kể path đi theo chiều nào)."""
     try:
         return (u_node, v_node) if u_node <= v_node else (v_node, u_node)
     except TypeError:
@@ -411,9 +400,6 @@ def _edge_key(u_node, v_node):
 
 
 def _build_edge_usage(paths_dict_by_alpha, id_to_node):
-    """Trả về dict: edge_key -> list các (alpha, path_idx) đi qua cạnh đó,
-    theo thứ tự alpha tăng dần rồi path_idx tăng dần (thứ tự cố định, dùng để
-    xác định vị trí dịch chuyển song song của TỪNG cạnh riêng biệt)."""
     edge_usage = {}
     alphas = sorted(paths_dict_by_alpha.keys())
     for alpha in alphas:
@@ -428,8 +414,6 @@ def _build_edge_usage(paths_dict_by_alpha, id_to_node):
 def _draw_paths_with_shared_edge_offset(ax, pos, paths_dict_by_alpha, id_to_node,
                                         edge_usage, color_map, alphas,
                                         spacing_step, main_width, sub_width):
-    """Vẽ các path, dịch chuyển song song CHỈ theo số path thực sự trùng
-    trên từng cạnh cụ thể (không phải theo chỉ số alpha/path toàn cục)."""
     num_alphas = len(alphas)
     for idx, alpha in enumerate(alphas):
         paths_list = paths_dict_by_alpha[alpha]
@@ -447,16 +431,11 @@ def _draw_paths_with_shared_edge_offset(ax, pos, paths_dict_by_alpha, id_to_node
                 v_node = optimal_node_ids[k + 1]
                 if u_node not in pos or v_node not in pos:
                     continue
-
-                # Vị trí của (alpha, path_idx) này TRONG SỐ các path cùng
-                # đi qua đúng cạnh (u_node, v_node) -- không phải toàn cục.
                 ek = _edge_key(u_node, v_node)
                 sharers = edge_usage[ek]
                 pos_in_edge = sharers.index((alpha, path_idx))
                 n_sharers = len(sharers)
-                # dịch đối xứng quanh 0: n_sharers=1 -> shift=0 (không lệch)
                 shift_factor = (pos_in_edge - (n_sharers - 1) / 2.0) * spacing_step
-
                 p1, p2 = np.array(pos[u_node]), np.array(pos[v_node])
                 direction = p2 - p1
                 length = np.linalg.norm(direction)
@@ -472,10 +451,6 @@ def _draw_paths_with_shared_edge_offset(ax, pos, paths_dict_by_alpha, id_to_node
 
 
 def _declutter_layout(pos, min_dist_frac=0.6, iterations=300):
-    """Đẩy các cặp node còn quá gần nhau ra xa tới khi đạt khoảng cách tối
-    thiểu -- hoạt động độc lập với cấu trúc cạnh, nên vẫn hiệu quả kể cả khi
-    nhiều nhánh (ngõ cụt) toả ra từ cùng 1 nút cha (fan-out lớn), trường hợp
-    mà bản thân thuật toán layout (KK/spring) không thể tách hết được."""
     nodes = list(pos.keys())
     coords = np.array([pos[n] for n in nodes], dtype=float)
     n = len(nodes)
@@ -514,19 +489,12 @@ def _declutter_layout(pos, min_dist_frac=0.6, iterations=300):
             push = (min_dist - dist) / 2.0 * (diff / dist)
             disp[i] += push
             disp[j] -= push
-        coords += disp * 0.5  # bước nhỏ để ổn định, tránh dao động
+        coords += disp * 0.5 
 
     return {node: tuple(coords[i]) for i, node in enumerate(nodes)}
 
 
 def _auto_pos_raw(G_active):
-    """Trải node đều, tránh dính chùm: dùng Kamada-Kawai với weight=None
-    (coi MỌI cạnh dài bằng nhau khi tính lực đẩy, nên các cụm ngõ cụt gần
-    nhau trong thực tế không còn bị co dúm lại) -- nhưng khởi tạo từ toạ độ
-    địa lý thật (nếu có) để vẫn giữ đúng HƯỚNG tổng thể của bản đồ thật
-    (nguồn/đích không bị xoay lộn xộn giữa các lần chạy), sau đó chạy thêm
-    một bước declutter để đẩy nốt các node còn sát nhau (VD nút có rất
-    nhiều nhánh cụt toả ra cùng lúc -- KK một mình không tách hết được)."""
     n_nodes = G_active.number_of_nodes()
     if n_nodes == 0:
         return {}
@@ -536,7 +504,7 @@ def _auto_pos_raw(G_active):
 
     try:
         if n_nodes > 800:
-            raise RuntimeError("graph quá lớn cho Kamada-Kawai, chuyển sang spring_layout")
+            raise RuntimeError("The graph is too large for Kamada-Kawai, switching to spring_layout")
         pos = nx.kamada_kawai_layout(G_active, weight=None, pos=init_pos, scale=8.0)
     except Exception:
         opt_k = 12.0 / math.sqrt(n_nodes)
@@ -559,19 +527,16 @@ def create_grid_layout(G):
     n = len(nodes)
     if n == 0:
         return {}
-
-    # Tự động tính số cột và số hàng dựa trên căn bậc hai (ưu tiên hình chữ nhật ngang nhẹ)
     ncols = max(1, round(np.sqrt(n * 1.4)))
     nrows = int(np.ceil(n / ncols))
 
     pos = {}
     for idx, node in enumerate(nodes):
-        r = idx // ncols  # Chỉ số hàng
-        c = idx % ncols  # Chỉ số cột
+        r = idx // ncols  
+        c = idx % ncols  
 
-        # Dàn đều tọa độ x, y
         x = c * 2.0
-        y = -r * 2.0  # Đặt dấu trừ để hàng 0 luôn nằm ở phía trên cùng
+        y = -r * 2.0  
 
         pos[node] = np.array([x, y])
 
@@ -607,7 +572,6 @@ def plot_optimal_paths(paths_dict_by_alpha, G_active, id_to_node, output_dir, V,
 
     edge_usage = _build_edge_usage(paths_dict_by_alpha, id_to_node)
     n_shared_edges = sum(1 for v in edge_usage.values() if len(v) > 1)
-    print(f"  -> {n_shared_edges}/{len(edge_usage)} cạnh có từ 2 path trở lên trùng nhau -> sẽ được tách song song.")
 
     # =========================================================================
     # IMAGE 1: OPTIMAL PATH ON GRID (Grid Layout)
